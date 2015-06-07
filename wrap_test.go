@@ -5,7 +5,6 @@ import (
 )
 
 func TestWrap(t *testing.T) {
-
 	cases := map[string]string{
 		"foobar":         "foobar",
 		"foobar quux":    "foobar quux",
@@ -20,5 +19,4 @@ func TestWrap(t *testing.T) {
 			t.Fatal("Didn't wrap correctly.")
 		}
 	}
-
 }
