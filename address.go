@@ -10,8 +10,8 @@ func parseAddress(input string) (string, error) {
 	// Trim it from spaces
 	input = strings.TrimSpace(input)
 
-	// Minimal length must be 2
-	if len(input) < 2 {
+	// Minimal length must be 3 or more
+	if len(input) < 3 {
 		return "", fmt.Errorf("Ill-formatted e-mail address: %s", input)
 	}
 

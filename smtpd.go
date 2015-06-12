@@ -22,15 +22,13 @@ type Server struct {
 	MaxMessageSize int
 	MaxRecipients  int
 
-	WrappersChain  []Wrapper
+	WrapperChain   []Wrapper
 	SenderChain    []Middleware
 	RecipientChain []Middleware
 	DeliveryChain  []Middleware
 
 	TLSConfig *tls.Config
 	ForceTLS  bool
-
-	EnableXCLIENT bool
 
 	extensions []string
 }
@@ -60,12 +58,16 @@ func (s *Server) configureDefaults() error {
 		s.MaxConnections = 100
 	}
 
+	if s.MaxRecipients == 0 {
+		s.MaxRecipients = 100
+	}
+
 	if s.MaxMessageSize == 0 {
 		s.MaxMessageSize = 20 * 1024 * 1024 // 20MB
 	}
 
-	if s.WrappersChain == nil {
-		s.WrappersChain = []Wrapper{}
+	if s.WrapperChain == nil {
+		s.WrapperChain = []Wrapper{}
 	}
 
 	if s.SenderChain == nil {
@@ -88,10 +90,6 @@ func (s *Server) configureDefaults() error {
 		"SIZE " + strconv.Itoa(s.MaxMessageSize),
 		"8BITMIME",
 		"PIPELINING",
-	}
-
-	if s.EnableXCLIENT {
-		s.extensions = append(s.extensions, "XCLIENT")
 	}
 
 	return nil

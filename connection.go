@@ -71,7 +71,7 @@ func (c *Connection) serve() {
 		}
 	})
 
-	for _, wr := range c.Server.WrappersChain {
+	for _, wr := range c.Server.WrapperChain {
 		ow = wr(ow)
 	}
 
@@ -152,10 +152,6 @@ func (c *Connection) handle(line string) {
 		c.handleNOOP(cmd)
 	case "QUIT":
 		c.handleQUIT(cmd)
-	case "AUTH":
-		c.handleAUTH(cmd)
-	case "XCLIENT":
-		c.handleXCLIENT(cmd)
 	default:
 		c.reply(502, "Unsupported command.")
 	}
