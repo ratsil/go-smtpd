@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/smtp"
 	"net/textproto"
@@ -12,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.org/chrj/smtpd"
+	"github.com/lavab/smtpd"
 )
 
 var localhostCert = []byte(`-----BEGIN CERTIFICATE-----
@@ -36,6 +37,10 @@ j2xk+4vnBSY0vrb4q/O3WZ46oorawWsCIQDWdpfzx/i11E6OZMR6FinJSNh4w0Gi
 SkjPiCBE0BX+AQIhAI/TiLk7YmBkQG3ovSYW0vvDntPlXpKj08ovJFw4U0D3AiEA
 lGjGna4oaauI0CWI6pG0wg4zklTnrDWK7w9h/S/T4e0=
 -----END RSA PRIVATE KEY-----`)
+
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
 
 func cmd(c *textproto.Conn, expectedCode int, format string, args ...interface{}) error {
 	id, err := c.Cmd(format, args...)
@@ -96,10 +101,6 @@ func TestSMTP(t *testing.T) {
 
 	if err := c.Hello("localhost"); err != nil {
 		t.Fatalf("HELO failed: %v", err)
-	}
-
-	if supported, _ := c.Extension("AUTH"); supported {
-		t.Fatal("AUTH supported before TLS")
 	}
 
 	if supported, _ := c.Extension("8BITMIME"); !supported {
@@ -186,8 +187,7 @@ func TestListenAndServe(t *testing.T) {
 
 func TestSTARTTLS(t *testing.T) {
 	addr, closer := runsslserver(t, &smtpd.Server{
-		Authenticator: func(peer smtpd.Peer, username, password string) error { return nil },
-		ForceTLS:      true,
+		ForceTLS: true,
 	})
 
 	defer closer()
@@ -197,12 +197,8 @@ func TestSTARTTLS(t *testing.T) {
 		t.Fatalf("Dial failed: %v", err)
 	}
 
-	if supported, _ := c.Extension("AUTH"); supported {
-		t.Fatal("AUTH supported before TLS")
-	}
-
 	if err := c.Mail("sender@example.org"); err == nil {
-		t.Fatal("Mail workded before TLS with ForceTLS")
+		t.Fatal("Mail worked before TLS with ForceTLS")
 	}
 
 	if err := cmd(c.Text, 220, "STARTTLS"); err != nil {
@@ -219,22 +215,6 @@ func TestSTARTTLS(t *testing.T) {
 
 	if err := c.StartTLS(&tls.Config{InsecureSkipVerify: true}); err == nil {
 		t.Fatal("STARTTLS worked twice")
-	}
-
-	if supported, _ := c.Extension("AUTH"); !supported {
-		t.Fatal("AUTH not supported after TLS")
-	}
-
-	if _, mechs := c.Extension("AUTH"); !strings.Contains(mechs, "PLAIN") {
-		t.Fatal("PLAIN AUTH not supported after TLS")
-	}
-
-	if _, mechs := c.Extension("AUTH"); !strings.Contains(mechs, "LOGIN") {
-		t.Fatal("LOGIN AUTH not supported after TLS")
-	}
-
-	if err := c.Auth(smtp.PlainAuth("foo", "foo", "bar", "127.0.0.1")); err != nil {
-		t.Fatalf("Auth failed: %v", err)
 	}
 
 	if err := c.Mail("sender@example.org"); err != nil {
@@ -269,102 +249,14 @@ func TestSTARTTLS(t *testing.T) {
 	}
 }
 
-func TestAuthRejection(t *testing.T) {
-	addr, closer := runsslserver(t, &smtpd.Server{
-		Authenticator: func(peer smtpd.Peer, username, password string) error {
-			return smtpd.ErrAuthInvalid
-		},
-		ForceTLS: true,
-	})
-
-	defer closer()
-
-	c, err := smtp.Dial(addr)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-
-	if err := c.StartTLS(&tls.Config{InsecureSkipVerify: true}); err != nil {
-		t.Fatalf("STARTTLS failed: %v", err)
-	}
-
-	if err := c.Auth(smtp.PlainAuth("foo", "foo", "bar", "127.0.0.1")); err == nil {
-		t.Fatal("Auth worked despite rejection")
-	}
-}
-
-func TestAuthNotSupported(t *testing.T) {
-	addr, closer := runsslserver(t, &smtpd.Server{
-		ForceTLS: true,
-	})
-
-	defer closer()
-
-	c, err := smtp.Dial(addr)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-
-	if err := c.StartTLS(&tls.Config{InsecureSkipVerify: true}); err != nil {
-		t.Fatalf("STARTTLS failed: %v", err)
-	}
-
-	if err := c.Auth(smtp.PlainAuth("foo", "foo", "bar", "127.0.0.1")); err == nil {
-		t.Fatal("Auth worked despite no authenticator")
-	}
-}
-
-func TestConnectionCheck(t *testing.T) {
-	addr, closer := runserver(t, &smtpd.Server{
-		ConnectionChecker: func(peer smtpd.Peer) error {
-			return smtpd.ErrMessageExceedStorage
-		},
-	})
-	defer closer()
-
-	if _, err := smtp.Dial(addr); err == nil {
-		t.Fatal("Dial succeeded despite ConnectionCheck")
-	}
-}
-
-func TestConnectionCheckSimpleError(t *testing.T) {
-	addr, closer := runserver(t, &smtpd.Server{
-		ConnectionChecker: func(peer smtpd.Peer) error {
-			return errors.New("Denied")
-		},
-	})
-	defer closer()
-
-	if _, err := smtp.Dial(addr); err == nil {
-		t.Fatal("Dial succeeded despite ConnectionCheck")
-	}
-}
-
-func TestHELOCheck(t *testing.T) {
-	addr, closer := runserver(t, &smtpd.Server{
-		HeloChecker: func(peer smtpd.Peer, name string) error {
-			if name != "foobar.local" {
-				t.Fatal("Wrong HELO name")
-			}
-			return smtpd.ErrMessageExceedStorage
-		},
-	})
-	defer closer()
-
-	c, err := smtp.Dial(addr)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-
-	if err := c.Hello("foobar.local"); err == nil {
-		t.Fatal("Unexpected HELO success")
-	}
-}
-
 func TestSenderCheck(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
-		SenderChecker: func(peer smtpd.Peer, addr string) error {
-			return smtpd.ErrMessageExceedStorage
+		SenderChain: []smtpd.Middleware{
+			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
+				return smtpd.Handler(func(conn *smtpd.Connection) {
+					conn.Error(errors.New("Random error"))
+				})
+			}),
 		},
 	})
 	defer closer()
@@ -381,8 +273,12 @@ func TestSenderCheck(t *testing.T) {
 
 func TestRecipientCheck(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
-		RecipientChecker: func(peer smtpd.Peer, addr string) error {
-			return smtpd.ErrMessageExceedStorage
+		RecipientChain: []smtpd.Middleware{
+			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
+				return smtpd.Handler(func(conn *smtpd.Connection) {
+					conn.Error(errors.New("Random error"))
+				})
+			}),
 		},
 	})
 	defer closer()
@@ -440,22 +336,38 @@ func TestMaxMessageSize(t *testing.T) {
 	}
 }
 
-func TestHandler(t *testing.T) {
+func TestHandlerAndWrapper(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
-		Handler: func(peer smtpd.Peer, env smtpd.Envelope) error {
-			if env.Sender != "sender@example.org" {
-				t.Fatalf("Unknown sender: %v", env.Sender)
-			}
-			if len(env.Recipients) != 1 {
-				t.Fatalf("Too many recipients: %d", len(env.Recipients))
-			}
-			if env.Recipients[0] != "recipient@example.net" {
-				t.Fatalf("Unknown recipient: %v", env.Recipients[0])
-			}
-			if string(env.Data) != "This is the email body\n" {
-				t.Fatalf("Wrong message body: %v", string(env.Data))
-			}
-			return nil
+		WrapperChain: []smtpd.Wrapper{
+			smtpd.Wrapper(func(next smtpd.Wrapped) smtpd.Wrapped {
+				return smtpd.Wrapped(func() {
+					log.Print("Hello from inside the wrapper!")
+					next()
+				})
+			}),
+		},
+		DeliveryChain: []smtpd.Middleware{
+			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
+				return smtpd.Handler(func(conn *smtpd.Connection) {
+					if conn.Envelope.Sender != "sender@example.org" {
+						t.Fatalf("Unknown sender: %v", conn.Envelope.Sender)
+					}
+
+					if len(conn.Envelope.Recipients) != 1 {
+						t.Fatalf("Too many recipients: %d", len(conn.Envelope.Recipients))
+					}
+
+					if conn.Envelope.Recipients[0] != "recipient@example.net" {
+						t.Fatalf("Unknown recipient: %v", conn.Envelope.Recipients[0])
+					}
+
+					if string(conn.Envelope.Data) != "This is the email body\n" {
+						t.Fatalf("Wrong message body: %v", string(conn.Envelope.Data))
+					}
+
+					next(conn)
+				})
+			}),
 		},
 	})
 	defer closer()
@@ -495,8 +407,12 @@ func TestHandler(t *testing.T) {
 
 func TestRejectHandler(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
-		Handler: func(peer smtpd.Peer, env smtpd.Envelope) error {
-			return smtpd.ErrServerError
+		DeliveryChain: []smtpd.Middleware{
+			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
+				return smtpd.Handler(func(conn *smtpd.Connection) {
+					conn.Error(smtpd.ErrServerError)
+				})
+			}),
 		},
 	})
 	defer closer()
@@ -564,6 +480,68 @@ func TestNoMaxConnections(t *testing.T) {
 	}
 
 	c1.Close()
+}
+
+func TestMisconfiguredTLS(t *testing.T) {
+	server := &smtpd.Server{
+		ForceTLS: true,
+	}
+
+	if server.ListenAndServe(":123123123").Error() != "Cannot use ForceTLS with no TLSConfig" {
+		t.Fatal("Unexpected configuration check success")
+	}
+
+	if err := server.Serve(nil); err != nil && err.Error() != "Cannot use ForceTLS with no TLSConfig" {
+		t.Fatalf("Unexpected serving error; %s", err)
+	}
+}
+
+func TestInvalidListenAddress(t *testing.T) {
+	server := &smtpd.Server{}
+
+	err := server.ListenAndServe("pleasedontwork")
+	if err.Error() != "listen tcp: missing port in address pleasedontwork" {
+		t.Fatalf("Unexpected port binding: %s", err)
+	}
+}
+
+type tmpError struct{}
+
+func (t *tmpError) Error() string {
+	return "dumb error"
+}
+func (t *tmpError) Timeout() bool {
+	return true
+}
+func (t *tmpError) Temporary() bool {
+	return true
+}
+
+type tmpListener struct {
+	ct int
+}
+
+func (t *tmpListener) Accept() (net.Conn, error) {
+	if t.ct == 0 {
+		t.ct = 1
+		return nil, &tmpError{}
+	}
+	return nil, errors.New("not temporary error")
+}
+func (t *tmpListener) Close() error {
+	return nil
+}
+func (t *tmpListener) Addr() net.Addr {
+	x, _ := net.InterfaceAddrs()
+	return x[0]
+}
+
+func TestTemporaryError(t *testing.T) {
+	server := &smtpd.Server{}
+	err := server.Serve(&tmpListener{})
+	if err.Error() != "not temporary error" {
+		t.Fatalf("Unexpected error; %s", err)
+	}
 }
 
 func TestMaxRecipients(t *testing.T) {
@@ -635,7 +613,27 @@ func TestInvalidRecipient(t *testing.T) {
 		t.Fatalf("Mail failed: %v", err)
 	}
 
+	if err := cmd(c.Text, 250, "MAIL"); err == nil {
+		t.Fatal("Unexpected MAIL success")
+	}
+
+	if err := cmd(c.Text, 250, "MAIL ayylmao"); err == nil {
+		t.Fatal("Unexpected MAIL success")
+	}
+
 	if err := c.Rcpt("invalid@@example.org"); err == nil {
+		t.Fatal("Unexpected RCPT success")
+	}
+
+	if err := cmd(c.Text, 250, "RCPT"); err == nil {
+		t.Fatal("Unexpected RCPT success")
+	}
+
+	if err := cmd(c.Text, 250, "RCPT ayylmao"); err == nil {
+		t.Fatal("Unexpected RCPT success")
+	}
+
+	if err := c.Rcpt(""); err == nil {
 		t.Fatal("Unexpected RCPT success")
 	}
 }
@@ -678,9 +676,13 @@ func TestDATAbeforeRCPT(t *testing.T) {
 
 func TestInterruptedDATA(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
-		Handler: func(peer smtpd.Peer, env smtpd.Envelope) error {
-			t.Fatal("Accepted DATA despite disconnection")
-			return nil
+		DeliveryChain: []smtpd.Middleware{
+			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
+				return smtpd.Handler(func(conn *smtpd.Connection) {
+					t.Fatal("Accepted DATA despite disconnection")
+					next(conn)
+				})
+			}),
 		},
 	})
 	defer closer()
@@ -803,82 +805,19 @@ func TestLongLine(t *testing.T) {
 	}
 }
 
-func TestXCLIENT(t *testing.T) {
-	addr, closer := runserver(t, &smtpd.Server{
-		EnableXCLIENT: true,
-		SenderChecker: func(peer smtpd.Peer, addr string) error {
-			if peer.HeloName != "new.example.net" {
-				t.Fatalf("Didn't override HELO name: %v", peer.HeloName)
-			}
-			if peer.Addr.String() != "42.42.42.42:4242" {
-				t.Fatalf("Didn't override IP/Port: %v", peer.Addr)
-			}
-			if peer.Username != "newusername" {
-				t.Fatalf("Didn't override username: %v", peer.Username)
-			}
-			if peer.Protocol != smtpd.SMTP {
-				t.Fatalf("Didn't override protocol: %v", peer.Protocol)
-			}
-			return nil
-		},
-	})
-	defer closer()
-
-	c, err := smtp.Dial(addr)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-
-	if supported, _ := c.Extension("XCLIENT"); !supported {
-		t.Fatal("XCLIENT not supported")
-	}
-
-	err = cmd(c.Text, 220, "XCLIENT NAME=ignored ADDR=42.42.42.42 PORT=4242 PROTO=SMTP HELO=new.example.net LOGIN=newusername")
-	if err != nil {
-		t.Fatalf("XCLIENT failed: %v", err)
-	}
-
-	if err := c.Mail("sender@example.org"); err != nil {
-		t.Fatalf("Mail failed: %v", err)
-	}
-
-	if err := c.Rcpt("recipient@example.net"); err != nil {
-		t.Fatalf("Rcpt failed: %v", err)
-	}
-
-	if err := c.Rcpt("recipient2@example.net"); err != nil {
-		t.Fatalf("Rcpt2 failed: %v", err)
-	}
-
-	wc, err := c.Data()
-	if err != nil {
-		t.Fatalf("Data failed: %v", err)
-	}
-
-	_, err = fmt.Fprintf(wc, "This is the email body")
-	if err != nil {
-		t.Fatalf("Data body failed: %v", err)
-	}
-
-	err = wc.Close()
-	if err != nil {
-		t.Fatalf("Data close failed: %v", err)
-	}
-
-	if err := c.Quit(); err != nil {
-		t.Fatalf("Quit failed: %v", err)
-	}
-}
-
 func TestEnvelopeReceived(t *testing.T) {
 	addr, closer := runsslserver(t, &smtpd.Server{
 		Hostname: "foobar.example.net",
-		Handler: func(peer smtpd.Peer, env smtpd.Envelope) error {
-			env.AddReceivedLine(peer)
-			if !bytes.HasPrefix(env.Data, []byte("Received: from localhost [127.0.0.1] by foobar.example.net with ESMTP;")) {
-				t.Fatal("Wrong received line.")
-			}
-			return nil
+		DeliveryChain: []smtpd.Middleware{
+			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
+				return smtpd.Handler(func(conn *smtpd.Connection) {
+					conn.Envelope.AddReceivedLine(conn)
+					if !bytes.HasPrefix(conn.Envelope.Data, []byte("Received: from localhost [127.0.0.1] by foobar.example.net with ESMTP;")) {
+						t.Fatal("Wrong received line.")
+					}
+					next(conn)
+				})
+			}),
 		},
 		ForceTLS: true,
 	})
@@ -951,67 +890,13 @@ func TestHELO(t *testing.T) {
 	}
 }
 
-func TestLOGINAuth(t *testing.T) {
-	addr, closer := runsslserver(t, &smtpd.Server{
-		Authenticator: func(peer smtpd.Peer, username, password string) error { return nil },
-	})
-	defer closer()
-
-	c, err := smtp.Dial(addr)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-
-	if err := c.StartTLS(&tls.Config{InsecureSkipVerify: true}); err != nil {
-		t.Fatalf("STARTTLS failed: %v", err)
-	}
-
-	if err := cmd(c.Text, 334, "AUTH LOGIN"); err != nil {
-		t.Fatalf("AUTH didn't work: %v", err)
-	}
-
-	if err := cmd(c.Text, 502, "foo"); err != nil {
-		t.Fatalf("AUTH didn't fail: %v", err)
-	}
-
-	if err := cmd(c.Text, 334, "AUTH LOGIN"); err != nil {
-		t.Fatalf("AUTH didn't work: %v", err)
-	}
-
-	if err := cmd(c.Text, 334, "Zm9v"); err != nil {
-		t.Fatalf("AUTH didn't work: %v", err)
-	}
-
-	if err := cmd(c.Text, 502, "foo"); err != nil {
-		t.Fatalf("AUTH didn't fail: %v", err)
-	}
-
-	if err := cmd(c.Text, 334, "AUTH LOGIN"); err != nil {
-		t.Fatalf("AUTH didn't work: %v", err)
-	}
-
-	if err := cmd(c.Text, 334, "Zm9v"); err != nil {
-		t.Fatalf("AUTH didn't work: %v", err)
-	}
-
-	if err := cmd(c.Text, 235, "Zm9v"); err != nil {
-		t.Fatalf("AUTH didn't work: %v", err)
-	}
-
-	if err := c.Quit(); err != nil {
-		t.Fatalf("Quit failed: %v", err)
-	}
-}
-
 func TestErrors(t *testing.T) {
 	cert, err := tls.X509KeyPair(localhostCert, localhostKey)
 	if err != nil {
 		t.Fatalf("Cert load failed: %v", err)
 	}
 
-	server := &smtpd.Server{
-		Authenticator: func(peer smtpd.Peer, username, password string) error { return nil },
-	}
+	server := &smtpd.Server{}
 
 	addr, closer := runserver(t, server)
 	defer closer()
@@ -1021,16 +906,8 @@ func TestErrors(t *testing.T) {
 		t.Fatalf("Dial failed: %v", err)
 	}
 
-	if err := cmd(c.Text, 502, "AUTH PLAIN foobar"); err != nil {
-		t.Fatalf("AUTH didn't fail: %v", err)
-	}
-
 	if err := c.Hello("localhost"); err != nil {
 		t.Fatalf("HELO failed: %v", err)
-	}
-
-	if err := cmd(c.Text, 502, "AUTH PLAIN foobar"); err != nil {
-		t.Fatalf("AUTH didn't fail: %v", err)
 	}
 
 	if err := cmd(c.Text, 502, "MAIL FROM:christian@technobabble.dk"); err != nil {
@@ -1055,26 +932,6 @@ func TestErrors(t *testing.T) {
 
 	if err := c.StartTLS(&tls.Config{InsecureSkipVerify: true}); err != nil {
 		t.Fatalf("STARTTLS failed: %v", err)
-	}
-
-	if err := cmd(c.Text, 502, "AUTH UNKNOWN"); err != nil {
-		t.Fatalf("AUTH didn't fail: %v", err)
-	}
-
-	if err := cmd(c.Text, 502, "AUTH PLAIN foobar"); err != nil {
-		t.Fatalf("AUTH didn't fail: %v", err)
-	}
-
-	if err := cmd(c.Text, 502, "AUTH PLAIN Zm9vAGJhcg=="); err != nil {
-		t.Fatalf("AUTH didn't fail: %v", err)
-	}
-
-	if err := cmd(c.Text, 334, "AUTH PLAIN"); err != nil {
-		t.Fatalf("AUTH didn't work: %v", err)
-	}
-
-	if err := cmd(c.Text, 235, "Zm9vAGJhcgBxdXV4"); err != nil {
-		t.Fatalf("AUTH didn't work: %v", err)
 	}
 
 	if err := c.Quit(); err != nil {

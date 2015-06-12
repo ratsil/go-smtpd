@@ -5,18 +5,26 @@ import (
 	"strings"
 )
 
-func parseAddress(src string) (string, error) {
-	if len(src) == 0 {
-		return "", fmt.Errorf("Ill-formatted e-mail address: %s", src)
-	}
-	
-	if src[0] != '<' || src[len(src)-1] != '>' {
-		return "", fmt.Errorf("Ill-formatted e-mail address: %s", src)
+// Gets the address from a string
+func parseAddress(input string) (string, error) {
+	// Trim it from spaces
+	input = strings.TrimSpace(input)
+
+	// Minimal length must be 3 or more
+	if len(input) < 3 {
+		return "", fmt.Errorf("Ill-formatted e-mail address: %s", input)
 	}
 
-	if strings.Count(src, "@") > 1 {
-		return "", fmt.Errorf("Ill-formatted e-mail address: %s", src)
+	// Ensure that the string starts and ends with gt and lt
+	if input[0] != '<' || input[len(input)-1] != '>' {
+		return "", fmt.Errorf("Ill-formatted e-mail address: %s", input)
 	}
 
-	return src[1 : len(src)-1], nil
+	// It must contain an at sign
+	if strings.Count(input, "@") != 1 {
+		return "", fmt.Errorf("Ill-formatted e-mail address: %s", input)
+	}
+
+	// Return the parsed email
+	return input[1 : len(input)-1], nil
 }
