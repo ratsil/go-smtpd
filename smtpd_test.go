@@ -251,11 +251,11 @@ func TestSTARTTLS(t *testing.T) {
 
 func TestSenderCheck(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
-		SenderChain: []smtpd.Middleware{
-			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
-				return smtpd.Handler(func(conn *smtpd.Connection) {
+		SenderChain: []smtpd.Sender{
+			smtpd.SenderFunc(func(x func(conn *smtpd.Connection)) func(*smtpd.Connection) {
+				return func(conn *smtpd.Connection) {
 					conn.Error(errors.New("Random error"))
-				})
+				}
 			}),
 		},
 	})
@@ -273,11 +273,11 @@ func TestSenderCheck(t *testing.T) {
 
 func TestRecipientCheck(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
-		RecipientChain: []smtpd.Middleware{
-			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
-				return smtpd.Handler(func(conn *smtpd.Connection) {
+		RecipientChain: []smtpd.Recipient{
+			smtpd.RecipientFunc(func(x func(conn *smtpd.Connection)) func(*smtpd.Connection) {
+				return func(conn *smtpd.Connection) {
 					conn.Error(errors.New("Random error"))
-				})
+				}
 			}),
 		},
 	})
@@ -339,16 +339,16 @@ func TestMaxMessageSize(t *testing.T) {
 func TestHandlerAndWrapper(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
 		WrapperChain: []smtpd.Wrapper{
-			smtpd.Wrapper(func(next smtpd.Wrapped) smtpd.Wrapped {
-				return smtpd.Wrapped(func() {
+			smtpd.WrapperFunc(func(next func()) func() {
+				return func() {
 					log.Print("Hello from inside the wrapper!")
 					next()
-				})
+				}
 			}),
 		},
-		DeliveryChain: []smtpd.Middleware{
-			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
-				return smtpd.Handler(func(conn *smtpd.Connection) {
+		DeliveryChain: []smtpd.Delivery{
+			smtpd.DeliveryFunc(func(next func(conn *smtpd.Connection)) func(conn *smtpd.Connection) {
+				return func(conn *smtpd.Connection) {
 					if conn.Envelope.Sender != "sender@example.org" {
 						t.Fatalf("Unknown sender: %v", conn.Envelope.Sender)
 					}
@@ -366,7 +366,7 @@ func TestHandlerAndWrapper(t *testing.T) {
 					}
 
 					next(conn)
-				})
+				}
 			}),
 		},
 	})
@@ -407,11 +407,11 @@ func TestHandlerAndWrapper(t *testing.T) {
 
 func TestRejectHandler(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
-		DeliveryChain: []smtpd.Middleware{
-			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
-				return smtpd.Handler(func(conn *smtpd.Connection) {
+		DeliveryChain: []smtpd.Delivery{
+			smtpd.DeliveryFunc(func(next func(conn *smtpd.Connection)) func(conn *smtpd.Connection) {
+				return func(conn *smtpd.Connection) {
 					conn.Error(smtpd.ErrServerError)
-				})
+				}
 			}),
 		},
 	})
@@ -676,12 +676,12 @@ func TestDATAbeforeRCPT(t *testing.T) {
 
 func TestInterruptedDATA(t *testing.T) {
 	addr, closer := runserver(t, &smtpd.Server{
-		DeliveryChain: []smtpd.Middleware{
-			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
-				return smtpd.Handler(func(conn *smtpd.Connection) {
+		DeliveryChain: []smtpd.Delivery{
+			smtpd.DeliveryFunc(func(next func(conn *smtpd.Connection)) func(conn *smtpd.Connection) {
+				return func(conn *smtpd.Connection) {
 					t.Fatal("Accepted DATA despite disconnection")
 					next(conn)
-				})
+				}
 			}),
 		},
 	})
@@ -808,15 +808,15 @@ func TestLongLine(t *testing.T) {
 func TestEnvelopeReceived(t *testing.T) {
 	addr, closer := runsslserver(t, &smtpd.Server{
 		Hostname: "foobar.example.net",
-		DeliveryChain: []smtpd.Middleware{
-			smtpd.Middleware(func(next smtpd.Handler) smtpd.Handler {
-				return smtpd.Handler(func(conn *smtpd.Connection) {
+		DeliveryChain: []smtpd.Delivery{
+			smtpd.DeliveryFunc(func(next func(conn *smtpd.Connection)) func(conn *smtpd.Connection) {
+				return func(conn *smtpd.Connection) {
 					conn.Envelope.AddReceivedLine(conn)
 					if !bytes.HasPrefix(conn.Envelope.Data, []byte("Received: from localhost [127.0.0.1] by foobar.example.net with ESMTP;")) {
 						t.Fatal("Wrong received line.")
 					}
 					next(conn)
-				})
+				}
 			}),
 		},
 		ForceTLS: true,

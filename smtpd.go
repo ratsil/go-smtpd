@@ -23,9 +23,9 @@ type Server struct {
 	MaxRecipients  int
 
 	WrapperChain   []Wrapper
-	SenderChain    []Middleware
-	RecipientChain []Middleware
-	DeliveryChain  []Middleware
+	SenderChain    []Sender
+	RecipientChain []Recipient
+	DeliveryChain  []Delivery
 
 	TLSConfig *tls.Config
 	ForceTLS  bool
@@ -71,15 +71,15 @@ func (s *Server) configureDefaults() error {
 	}
 
 	if s.SenderChain == nil {
-		s.SenderChain = []Middleware{}
+		s.SenderChain = []Sender{}
 	}
 
 	if s.RecipientChain == nil {
-		s.RecipientChain = []Middleware{}
+		s.RecipientChain = []Recipient{}
 	}
 
 	if s.DeliveryChain == nil {
-		s.DeliveryChain = []Middleware{}
+		s.DeliveryChain = []Delivery{}
 	}
 
 	if s.ForceTLS && s.TLSConfig == nil {

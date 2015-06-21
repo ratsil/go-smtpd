@@ -41,7 +41,7 @@ type Connection struct {
 func (c *Connection) serve() {
 	defer c.close()
 
-	ow := Wrapped(func() {
+	ow := func() {
 		// Send a Welcome message
 		c.welcome()
 		for {
@@ -69,10 +69,10 @@ func (c *Connection) serve() {
 
 			break
 		}
-	})
+	}
 
 	for _, wr := range c.Server.WrapperChain {
-		ow = wr(ow)
+		ow = wr.Wrap(ow)
 	}
 
 	ow()

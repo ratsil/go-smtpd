@@ -108,17 +108,17 @@ func (c *Connection) handleMAIL(cmd *command) {
 	}
 
 	// Execute the sender checking chain
-	oh := Handler(func(_ *Connection) {
+	oh := func(_ *Connection) {
 		c.Envelope = &Envelope{
 			Sender:     address,
 			Recipients: []string{},
 		}
 
 		c.reply(250, "Go ahead.")
-	})
+	}
 
 	for _, ha := range c.Server.SenderChain {
-		oh = ha(oh)
+		oh = ha.HandleSender(oh)
 	}
 
 	oh(c)
@@ -157,13 +157,13 @@ func (c *Connection) handleRCPT(cmd *command) {
 	}
 
 	// Execute the recipient checking chain
-	oh := Handler(func(_ *Connection) {
+	oh := func(_ *Connection) {
 		c.Envelope.Recipients = append(c.Envelope.Recipients, address)
 		c.reply(250, "Go ahead.")
-	})
+	}
 
 	for _, ha := range c.Server.RecipientChain {
-		oh = ha(oh)
+		oh = ha.HandleRecipient(oh)
 	}
 
 	oh(c)
@@ -231,13 +231,13 @@ func (c *Connection) handleDATA(cmd *command) {
 		c.Envelope.Data = data.Bytes()
 
 		// Execute the delivery chain
-		oh := Handler(func(_ *Connection) {
+		oh := func(_ *Connection) {
 			c.reply(250, "Thank you.")
 			c.reset()
-		})
+		}
 
 		for _, ha := range c.Server.DeliveryChain {
-			oh = ha(oh)
+			oh = ha.HandleDelivery(oh)
 		}
 
 		oh(c)
