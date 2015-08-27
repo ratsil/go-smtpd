@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lavab/smtpd"
+	"github.com/pgpst/smtpd"
 )
 
 var localhostCert = []byte(`-----BEGIN CERTIFICATE-----

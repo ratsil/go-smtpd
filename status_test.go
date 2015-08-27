@@ -3,7 +3,7 @@ package smtpd_test
 import (
 	"testing"
 
-	"github.com/lavab/smtpd"
+	"github.com/pgpst/smtpd"
 )
 
 func TestStatus(t *testing.T) {
