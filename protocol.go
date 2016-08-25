@@ -108,20 +108,23 @@ func (c *Connection) handleMAIL(cmd *command) {
 	}
 
 	// Execute the sender checking chain
-	oh := func(_ *Connection) {
-		c.Envelope = &Envelope{
-			Sender:     address,
-			Recipients: []string{},
-		}
-
-		c.reply(250, "Go ahead.")
+	//	oh := func(_ *Connection) {
+	c.Envelope = &Envelope{
+		Sender:     address,
+		Recipients: []string{},
+	}
+	if nil != c.Server.OnConnection {
+		c.Server.OnConnection(c)
 	}
 
-	for _, ha := range c.Server.SenderChain {
-		oh = ha.HandleSender(oh)
-	}
+	c.reply(250, "Go ahead.")
+	// }
 
-	oh(c)
+	// for _, ha := range c.Server.SenderChain {
+	// 	oh = ha.HandleSender(oh)
+	// }
+
+	// oh(c)
 
 	return
 }
@@ -160,15 +163,15 @@ func (c *Connection) handleRCPT(cmd *command) {
 	c.Envelope.Recipients = append(c.Envelope.Recipients, address)
 
 	// Execute the recipient checking chain
-	oh := func(_ *Connection) {
-		c.reply(250, "Go ahead.")
-	}
+	//oh := func(_ *Connection) {
+	c.reply(250, "Go ahead.")
+	// }
 
-	for _, ha := range c.Server.RecipientChain {
-		oh = ha.HandleRecipient(oh)
-	}
+	// for _, ha := range c.Server.RecipientChain {
+	// 	oh = ha.HandleRecipient(oh)
+	// }
 
-	oh(c)
+	// oh(c)
 
 	return
 }
@@ -231,18 +234,20 @@ func (c *Connection) handleDATA(cmd *command) {
 	if err == io.EOF {
 		// Message was smaller than MaxMessageSize - deliver the message
 		c.Envelope.Data = data.Bytes()
-
+		if nil != c.Server.OnMail {
+			c.Server.OnMail(c)
+		}
 		// Execute the delivery chain
-		oh := func(_ *Connection) {
-			c.reply(250, "Thank you.")
-			c.reset()
-		}
+		// oh := func(_ *Connection) {
+		c.reply(250, "Thank you.")
+		c.reset()
+		// }
 
-		for _, ha := range c.Server.DeliveryChain {
-			oh = ha.HandleDelivery(oh)
-		}
+		// for _, ha := range c.Server.DeliveryChain {
+		// 	oh = ha.HandleDelivery(oh)
+		// }
 
-		oh(c)
+		// oh(c)
 	}
 
 	if err != nil {

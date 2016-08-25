@@ -41,41 +41,41 @@ type Connection struct {
 func (c *Connection) serve() {
 	defer c.close()
 
-	ow := func() {
-		// Send a Welcome message
-		c.welcome()
-		for {
-			// Scan for new messages, will break when there's an error
-			for c.scanner.Scan() {
-				// Handle the textual version of the message
-				c.handle(c.scanner.Text())
-			}
-
-			// Something is wrong!
-			err := c.scanner.Err()
-			if err != nil && err == bufio.ErrTooLong {
-				c.reply(500, "Line too long")
-
-				// Proceed to the next line and create a new scanner
-				c.reader.ReadString('\n')
-				c.scanner = bufio.NewScanner(c.reader)
-
-				// Reset the context
-				c.reset()
-				continue
-			} else if err != nil {
-				log.Print(err)
-			}
-
-			break
+	// ow := func() {
+	// Send a Welcome message
+	c.welcome()
+	for {
+		// Scan for new messages, will break when there's an error
+		for c.scanner.Scan() {
+			// Handle the textual version of the message
+			c.handle(c.scanner.Text())
 		}
-	}
 
-	for _, wr := range c.Server.WrapperChain {
-		ow = wr.Wrap(ow)
-	}
+		// Something is wrong!
+		err := c.scanner.Err()
+		if err != nil && err == bufio.ErrTooLong {
+			c.reply(500, "Line too long")
 
-	ow()
+			// Proceed to the next line and create a new scanner
+			c.reader.ReadString('\n')
+			c.scanner = bufio.NewScanner(c.reader)
+
+			// Reset the context
+			c.reset()
+			continue
+		} else if err != nil {
+			log.Print(err)
+		}
+
+		break
+	}
+	// }
+
+	// for _, wr := range c.Server.WrapperChain {
+	// 	ow = wr.Wrap(ow)
+	// }
+
+	// ow()
 }
 
 func (c *Connection) welcome() {

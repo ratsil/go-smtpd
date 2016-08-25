@@ -22,16 +22,19 @@ type Server struct {
 	MaxMessageSize int
 	MaxRecipients  int
 
-	WrapperChain   []Wrapper
-	SenderChain    []Sender
-	RecipientChain []Recipient
-	DeliveryChain  []Delivery
+	// WrapperChain   []Wrapper
+	// SenderChain    []Sender
+	// RecipientChain []Recipient
+	// DeliveryChain  []Delivery
+	OnConnection Handler
+	OnMail       Handler
 
 	TLSConfig *tls.Config
 	ForceTLS  bool
 
 	extensions []string
 }
+type Handler func(conn *Connection) error
 
 func (s *Server) configureDefaults() error {
 	if s.Hostname == "" {
@@ -66,21 +69,21 @@ func (s *Server) configureDefaults() error {
 		s.MaxMessageSize = 20 * 1024 * 1024 // 20MB
 	}
 
-	if s.WrapperChain == nil {
-		s.WrapperChain = []Wrapper{}
-	}
+	// if s.WrapperChain == nil {
+	// 	s.WrapperChain = []Wrapper{}
+	// }
 
-	if s.SenderChain == nil {
-		s.SenderChain = []Sender{}
-	}
+	// if s.SenderChain == nil {
+	// 	s.SenderChain = []Sender{}
+	// }
 
-	if s.RecipientChain == nil {
-		s.RecipientChain = []Recipient{}
-	}
+	// if s.RecipientChain == nil {
+	// 	s.RecipientChain = []Recipient{}
+	// }
 
-	if s.DeliveryChain == nil {
-		s.DeliveryChain = []Delivery{}
-	}
+	// if s.DeliveryChain == nil {
+	// 	s.DeliveryChain = []Delivery{}
+	// }
 
 	if s.ForceTLS && s.TLSConfig == nil {
 		return errors.New("Cannot use ForceTLS with no TLSConfig")
